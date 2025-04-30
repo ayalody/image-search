@@ -1,0 +1,7 @@
+fastapi>=0.111
+uvicorn[standard]>=0.29
+elasticsearch>=8.12,<9
+sentence-transformers>=2.5     # same as embedder
+pillow                         # read uploaded images
+python-multipart               # FastAPI file uploads
+open_clip_torch>=2.24

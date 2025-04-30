@@ -1,0 +1,90 @@
+############################
+#  Volumes (shared state)  #
+############################
+volumes:
+  images:          # raw downloaded files (downloader ⇄ embedder)
+  es-data:         # persistent Elasticsearch data
+
+############################
+#  Services                #
+############################
+services:
+  # ---------- Vector store -----------------------------------------------
+  es:
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.13.0
+    environment:
+      - discovery.type=single-node
+      - xpack.ml.enabled=true        # enables dense_vector + ANN
+      - xpack.security.enabled=false
+      - xpack.security.http.ssl.enabled=false
+      - ES_JAVA_OPTS=-Xms1g -Xmx1g   # tune heap for your laptop
+    ports:
+      - "9200:9200"
+    volumes:
+      - es-data:/usr/share/elasticsearch/data
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fs http://localhost:9200/_cluster/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ---------- Image-Downloader -------------------------------------------
+  downloader:
+    build:
+      context: .                     # repo root (can see common/)
+      dockerfile: downloader/Dockerfile
+    depends_on:
+      - es
+    environment:
+      - OUTPUT_DIR=/data/images            # where files are written
+      - URL_FILE=/data/image_urls.txt      # mounted URL list
+      - ES_HOST=http://es:9200
+    volumes:
+      - images:/data/images                # shared volume
+      - ./data/images:/data/images         # plus a host bind-mount
+      - ./data/image_urls.txt:/data/image_urls.txt:ro
+
+  # ---------- Embedding-Generator ----------------------------------------
+  embedder:
+    build:
+      context: .                     # repo root
+      dockerfile: embedder/Dockerfile
+    depends_on:
+      es:
+        condition: service_healthy
+    environment:
+      - IMAGES_DIR=/data/images
+      - ES_HOST=http://es:9200
+      - EMBED_MODEL=openclip         # or blip2 …
+      - LOG_LEVEL=INFO
+    volumes:
+      - images:/data/images
+
+  # ---------- Search API --------------------------------------------------
+  search-api:
+      build:
+        context: .                          #  ← repo root
+        dockerfile: search_api/Dockerfile   #  ← same file you already have
+      environment:
+        ES_HOST: http://es:9200
+      ports:
+        - "8000:8000"
+      volumes:
+        - ./data/images:/data/images:ro
+      depends_on:
+        es:
+          condition: service_healthy
+      healthcheck:
+        test: ["CMD", "curl", "-f", "http://localhost:8000/healthz"]
+        interval: 5s
+        timeout: 3s
+        retries: 5
+  
+  # ---------- Web UI ------------------------------------------------------
+  ui:
+    build: ./ui
+    depends_on:
+      search-api:
+        condition: service_healthy
+    ports:
+      - "8501:8501"

@@ -1,0 +1,9 @@
+torch>=2.2
+open_clip_torch>=2.24           # default model backend
+pillow>=10.3
+elasticsearch>=8.13,<9
+pydantic>=2.7                   # used in config.py
+python-dotenv>=1.0
+tqdm>=4.66
+pydantic-settings>=2.2
+pydantic>=2.7
