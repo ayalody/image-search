@@ -41,7 +41,6 @@ services:
       - ES_HOST=http://es:9200
     volumes:
       - images:/data/images                # shared volume
-      - ./data/images:/data/images         # plus a host bind-mount
       - ./data/image_urls.txt:/data/image_urls.txt:ro
 
   # ---------- Embedding-Generator ----------------------------------------
