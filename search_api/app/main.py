@@ -2,12 +2,17 @@ from fastapi import FastAPI, UploadFile, HTTPException
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 
+import os
 from pathlib import Path
-from .schemas import TextQuery
-from .config  import ES_HOST, ES_INDEX, TOP_K_DEFAULT, NUM_CANDIDATES
-from common.models import encoder
 
-from common.es_utils import get_es_client, knn_search
+# local deps
+from .schemas import TextQuery
+from .config  import ES_INDEX, TOP_K_DEFAULT, NUM_CANDIDATES, DEVICE
+
+# shared utils
+from common.models   import encoder
+from common.es_utils import get_es_client, ensure_index_exists, knn_search
+
 
 app = FastAPI(
     title       = "Image-Search-API",
@@ -15,7 +20,12 @@ app = FastAPI(
     description = "k-NN search over image embeddings stored in Elasticsearch",
 )
 
-es = get_es_client()                 # one client per worker
+# -------------------------- ES client + index -------------------------------------
+es = get_es_client()                 # one client per process
+ensure_index_exists(es, ES_INDEX)    # create / fix mapping on startup
+
+# -------------------------- ensure encoder on right device ------------------------
+encoder.model.to(DEVICE)
 
 
 # ─────────────────────────── ROUTES ──────────────────────────
@@ -68,6 +78,25 @@ app.mount(
     StaticFiles(directory="/data/images"),
     name="images",
 )
+
+@app.get("/meta")
+async def meta() -> dict:
+    info   = es.info()
+    health = es.cluster.health()
+    count  = es.count(index=ES_INDEX)["count"]
+
+    return {
+        "model_name":  os.getenv("MODEL", "RN50"),
+        "vector_dim":  encoder.embed_dim,
+        "device":      str(next(iter(encoder.model.parameters())).device),
+        "es_version":  info["version"]["number"],
+        "es_index":    ES_INDEX,
+        "doc_count":   count,
+        "hnsw_m":      16,
+        "hnsw_ef":     512,
+        "cluster":     health["status"],
+    }
+
 
 @app.get("/healthz")
 async def healthz():

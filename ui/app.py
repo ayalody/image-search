@@ -5,6 +5,29 @@ from PIL import Image
 
 API_URL = os.getenv("API_URL", "http://search-api:8000")
 TOP_K_DEFAULT = int(os.getenv("TOP_K", 10))
+MODEL     = os.getenv("MODEL",     "RN50")
+ES_INDEX  = os.getenv("ES_INDEX",  "images")
+
+# ───────────────────────── sidebar “About” panel ─────────────────────────
+with st.sidebar.expander("🔧 Runtime info", expanded=False):
+    try:
+        meta = requests.get(f"{API_URL}/meta", timeout=5).json()
+    except Exception as e:
+        st.error(f"Meta fetch failed: {e}")
+    else:
+        st.markdown(
+            f"""
+            **Model**: `{meta['model_name']}`  
+            **Dim**: `{meta['vector_dim']}`  
+            **Device**: `{meta['device']}`  
+            **ES index**: `{meta['es_index']}`  
+            **Docs**: `{meta['doc_count']}`  
+            **ES v**: `{meta['es_version']}` ({meta['cluster']})  
+            **HNSW**: m={meta['hnsw_m']} ef={meta['hnsw_ef']}
+            """
+        )
+
+# ───────────────────────── main UI (search form) ─────────────────────────
 
 st.title("🔍 Image Search Demo")
 

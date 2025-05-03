@@ -1,5 +1,5 @@
 """
-Centralised defaults so they can be overridden via env-vars
+Centralized defaults so they can be overridden via env-vars
 in docker-compose.yml or the host shell.
 """
 import os
