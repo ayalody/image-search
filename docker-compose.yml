@@ -54,7 +54,7 @@ services:
     environment:
       - IMAGES_DIR=/data/images
       - ES_HOST=http://es:9200
-      - EMBED_MODEL=RN50         # or ViT-L-14
+      - MODEL=RN50         # ViT-L-14 | blip2 | RN50 | etc.
       - LOG_LEVEL=INFO
     volumes:
       - images:/data/images

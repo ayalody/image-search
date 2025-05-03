@@ -4,42 +4,48 @@ Utilities shared functions by downloader / embedder / search-api.
 import os
 import logging
 from elasticsearch import Elasticsearch, ConnectionError, TransportError, BadRequestError
+from common.models import encoder
 
 # ────────────────────────────────────────────────────────────────────────────────
 # CONFIG
 ES_HOST   = os.getenv("ES_HOST", "http://es:9200")   # overridable in compose
 ES_INDEX  = os.getenv("ES_INDEX", "images")
 TIMEOUT_S = int(os.getenv("ES_TIMEOUT", 30))
-VECTOR_DIM = 768        # 768 for ViT-L/14; change when loading another checkpoint
 
-_MAPPING = {
-    "mappings": {
+
+
+def ensure_index_exists(es: Elasticsearch, index: str = ES_INDEX):
+    # grab the current encoder’s dimension
+    dim = encoder.embed_dim
+
+    mapping = {
+      "mappings": {
         "properties": {
-            "path":   {"type": "keyword"},
-            "vector": {
-                "type": "dense_vector",
-                "dims": VECTOR_DIM,
-                "index": True,
-                "similarity": "cosine",
-                "index_options": {"type": "hnsw", "m": 16, "ef_construction": 512},
-            },
+          "path": {"type": "keyword"},
+          "vector": {
+            "type": "dense_vector",
+            "dims": dim,
+            "index": True,
+            "similarity": "cosine",
+            "index_options": {"type": "hnsw", "m": 16, "ef_construction": 512},
+          },
         }
+      }
     }
-}
 
-def ensure_index_exists(es: Elasticsearch, index: str = "images"):
-    """
-    Create the 'images' index with an ANN-enabled dense_vector field.
-    Safe to call multiple times (no-op if already there).
-    """
-    try:
-        if es.indices.exists(index=index):
+    if es.indices.exists(index=index):
+        # fetch the existing mapping to see its dims
+        old_map = es.indices.get_mapping(index=index)
+        # drill down to the `dims` field
+        old_dims = old_map[index]["mappings"]["properties"]["vector"]["dims"]
+        if old_dims == dim:
+            # perfect — nothing to do
             return
-    except BadRequestError:            # corrupt stub → drop & recreate
-        es.indices.delete(index=index, ignore_unavailable=True)
+        # mismatch! delete & recreate
+        es.indices.delete(index=index)
 
-    es.indices.create(index=index, body=_MAPPING)
-
+    # either it didn’t exist, or we just deleted it
+    es.indices.create(index=index, body=mapping)
 
 # ────────────────────────────────────────────────────────────────────────────────
 # CLIENT FACTORY
@@ -91,4 +97,3 @@ def knn_search(
         {**hit["_source"], "id": hit["_id"], "score": hit["_score"]}
         for hit in resp["hits"]["hits"]
     ]
-
