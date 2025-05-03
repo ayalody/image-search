@@ -54,7 +54,7 @@ services:
     environment:
       - IMAGES_DIR=/data/images
       - ES_HOST=http://es:9200
-      - EMBED_MODEL=openclip         # or blip2 …
+      - EMBED_MODEL=RN50         # or ViT-L-14
       - LOG_LEVEL=INFO
     volumes:
       - images:/data/images
@@ -69,7 +69,7 @@ services:
       ports:
         - "8000:8000"
       volumes:
-        - ./data/images:/data/images:ro
+        - images:/data/images:ro
       depends_on:
         es:
           condition: service_healthy
