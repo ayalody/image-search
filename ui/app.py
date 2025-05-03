@@ -1,4 +1,4 @@
-import os, requests
+import os, requests, time
 import streamlit as st
 from io import BytesIO
 from PIL import Image
@@ -39,6 +39,7 @@ with st.form(key="search_form"):
     submitted = st.form_submit_button("Search")
 
 if submitted and query:
+    t0 = time.time()
     with st.spinner("Querying…"):
         resp = requests.post(
             f"{API_URL}/search/text",
@@ -55,3 +56,5 @@ if submitted and query:
             col.image(img, caption=f"{h['score']:.3f}")
     else:
         st.error(f"Error {resp.status_code}: {resp.text}")
+    latency_ms = (time.time() - t0) * 1000
+    st.write(f"⏱️ {latency_ms:.1f} ms")
