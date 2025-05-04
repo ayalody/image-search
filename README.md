@@ -1,123 +1,114 @@
-# Image Search System
+# 🖼️ Image‑Search Project
 
-A distributed system for searching and retrieving images using vector embeddings and semantic search capabilities.
-
-## System Architecture
-
-```text
-┌────────────┐      ┌─────────────┐      ┌────────────────┐
-│  Image     │      │  Feature    │      │ Elasticsearch  │
-│  Folder    │ ───▶ │  Extractor  │ ───▶ │  (Vector &     │
-│ (*.jpg)    │      │  (CLIP)     │      │   Metadata)    │
-└────────────┘      └─────────────┘      └────────┬───────┘
-                                                  │
-                          ┌───────────────────────┴──────────┐
-                          │  Streamlit Web UI (inside Docker)│
-                          │  • Text box → vector query       │
-                          │  • Top‑k similar images grid     │
-                          └──────────────────────────────────┘
-```
-
-### The system consists of several microservices working together:
-
-- **Elasticsearch (es)**: Vector store for storing and searching image embeddings
-- **Downloader**: Downloads images from provided URLs
-- **Embedder**: Generates vector embeddings for images using ML models
-- **Search API**: REST API for querying and retrieving images
-- **Web UI**: User interface for interacting with the image search system
+A fully Docker‑orchestrated demo that turns any list of image URLs into a local **vector‑search engine**.  It downloads pictures, embeds them with OpenCLIP, stores vectors in Elasticsearch 8, and serves a FastAPI + Streamlit front‑end so you can type a prompt such as *“red car at night”* and instantly see relevant images.
 
 ---
 
-## Prerequisites
+## 📊 Architecture at a glance
 
-- Docker and Docker Compose
-- Sufficient disk space for image storage (managed by Docker volumes)
-- A list of image URLs in `data/image_urls.txt`
+```mermaid
+flowchart LR
+    subgraph Data
+        A["urls.txt"] -- "bind‑mount" --> D
+    end
 
-## Getting Started
+    subgraph Containers
+        D(["Downloader<br/>(asyncio)"]) --> I[["/images volume/"]]
+        E(["Embedder<br/>(OpenCLIP → vector)"]) -->|"_bulk docs_"| ES[("es<br/>(Elasticsearch 8<br/>HNSW index)")]
+        I --> E
+        I -. "read‑only" .-> API(["Search‑api<br/>(FastAPI)"])
+        API <==>|"search"| ES
+        UI(["UI<br/>(Streamlit)"]) -->|"REST /search"| API
+    end
 
-1. Clone the repository
-2. Create a `data` directory and add your `image_urls.txt` file
-3. Start the services:
-   ```bash
-   docker-compose up -d
-   ```
-
-The system will:
-- Start Elasticsearch for vector storage
-- Download images from the provided URLs (stored in Docker volumes)
-- Generate embeddings for the images
-- Make the search API available at `http://localhost:8000`
-- Serve the web UI at `http://localhost:8501`
-
-## Data Storage
-
-The system uses Docker volumes for data persistence:
-
-- `images`: Stores downloaded images (shared between downloader and embedder)
-- `es-data`: Stores Elasticsearch data and indices
-
-Images are stored in Docker volumes and are not written to the host machine. This provides better isolation and performance.
-
-## Components
-
-### Elasticsearch (es)
-- Runs on port 9200
-- Stores image embeddings and metadata
-- Provides vector search capabilities
-- Data persisted in `es-data` volume
-
-### Downloader
-- Downloads images from URLs in `image_urls.txt`
-- Stores images in shared `images` volume
-- Updates Elasticsearch with image metadata
-
-### Embedder
-- Generates vector embeddings for images
-- Supports multiple embedding models (e.g., OpenCLIP, BLIP2)
-- Updates Elasticsearch with image embeddings
-- Reads images from shared `images` volume
-
-### Search API
-- REST API available at `http://localhost:8000`
-- Provides endpoints for:
-  - Image search
-  - Health checks
-  - System status
-- Accesses images through Docker volumes
-
-### Web UI
-- Streamlit-based interface
-- Accessible at `http://localhost:8501`
-- Provides visual interface for image search
-
-## Configuration
-
-- Adjust Elasticsearch heap size in `docker-compose.yml` if needed
-- Configure embedding model in embedder service
-- Modify ports if they conflict with existing services
-
-## Monitoring
-
-- Elasticsearch health: `http://localhost:9200/_cluster/health`
-- Search API health: `http://localhost:8000/healthz`
-- Web UI: `http://localhost:8501`
-
-## Troubleshooting
-
-If services fail to start:
-1. Check Docker volume space availability
-2. Verify `image_urls.txt` format
-3. Check Elasticsearch health
-4. Review container logs using `docker-compose logs <service_name>`
-
-## Data Management
-
-To clean up data:
-```bash
-# Remove all containers and volumes
-docker-compose down -v
-
-# Remove specific volumes
-docker volume rm image-search_images image-search_es-data
+    classDef c fill:#f6f8fa,stroke:#999,color:#000;
+    class D,E,ES,API,UI,I c;
 ```
+
+*Shared state*
+
+* **images volume** – raw `*.jpg/.png` files (Downloader ⇄ Embedder ⇄ UI)
+* **es‑data volume** – persisted Lucene shards
+
+---
+
+## 🚀 Quick start (local)
+
+```bash
+# 1. clone & position at repo root
+$ git clone https://github.com/ayalody/image-search.git && cd image-search
+
+# 2. put some image URLs (one per line)
+$ echo "https://picsum.photos/id/237/600/400" >> data/image_urls.txt
+
+# 3. build & launch
+$ docker compose build --pull
+$ docker compose up --wait -d     # exits when every service is healthy
+
+# 4. open UI
+$ open http://localhost:8501       # or curl the API:  GET :8000/search/text
+```
+
+When the UI loads, type a phrase and you should see thumbnails in ≤ 1 second.
+
+---
+
+## ⚙️ Runtime configuration
+
+| Env var (service)           | Default                | What it does                                  |
+| --------------------------- | ---------------------- | --------------------------------------------- |
+| \`\` (downloader)           | `/data/image_urls.txt` | Path to newline‑separated list of image URLs. |
+| \`\` (downloader)           | `/data/images`         | Where JPEGs/PNGs are written.                 |
+| \`\` (downloader)           | `32`                   | Socket limit for parallel downloads.          |
+| \`\` (downloader, embedder) | `30`                   | How often each service re‑scans for new work. |
+| \`\` (embedder)             | `/data/images`         | Directory to walk for picture files.          |
+| \`\` (embedder)             | `RN50`                 | Any OpenCLIP ckpt, e.g. `ViT‑L‑14‑quickgelu`. |
+| \`\` (all services)         | `http://es:9200`       | Elasticsearch URL.                            |
+| \`\` (embedder)             | `INFO`                 | `DEBUG` prints idle heart‑beats.              |
+
+Set these with `-e` flags or a `.env` file.
+
+---
+
+## 📈 Scaling strategy (millions of images, high traffic)
+
+| Layer            | How to scale                                                                                                                                                                  |
+| ---------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Downloader**   | Push URLs into SQS/RabbitMQ; autoscale multiple downloader pods; use S3 instead of local volume.                                                                              |
+| **Embedder**     | Horizontal GPU workers behind queue; switch to batch‑embedding & helper.bulk; store vectors in nightly bulk jobs.                                                             |
+| **Vector store** | Elastic Search → 3‑node dedicated cluster• *data* hot tier for vectors• 1 replica for HA• `m=32`, larger heap.  For >50 M images consider OpenSearch K‑NN or Faiss + DiskANN. |
+|                  |                                                                                                                                                                               |
+| **API**          | Gunicorn/Uvicorn with 2× vCPU workers; behind nginx ingress; enable ES HTTP compression; cache last 1 k queries in Redis.                                                     |
+| **UI**           | Stateless—scale via additional Streamlit pods or migrate to React+Next.js for CDN hosting.                                                                                    |
+
+> Total ingestion throughput becomes a function of embed‑GPU count; query throughput scales independently by adding API pods.
+
+---
+
+## 🧪 Development tips
+
+```bash
+# follow logs of one service
+$ docker compose logs -f embedder
+
+# run unit tests & lint (requires python 3.11 locally)
+$ hatch run all        # or  tox -e py311
+
+# wipe everything
+$ docker compose down -v && docker builder prune -af
+```
+
+---
+
+## 📝 Contributing
+
+1. Fork / feature‑branch.
+2. Pre‑commit hooks (`ruff`, `black`, `isort`).
+3. `docker compose build --pull --no-cache` must stay green.
+4. Submit PR; CI runs cold‑boot health check and `pip check`.
+
+PRs for new models or Faiss back‑end are welcome!
+
+---
+
+© 2025 Image Search Project — MIT licensed.
