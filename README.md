@@ -4,13 +4,29 @@ A distributed system for searching and retrieving images using vector embeddings
 
 ## System Architecture
 
-The system consists of several microservices working together:
+```text
+┌────────────┐      ┌─────────────┐      ┌────────────────┐
+│  Image     │      │  Feature    │      │ Elasticsearch  │
+│  Folder    │ ───▶ │  Extractor  │ ───▶ │  (Vector &     │
+│ (*.jpg)    │      │  (CLIP)     │      │   Metadata)    │
+└────────────┘      └─────────────┘      └────────┬───────┘
+                                                  │
+                          ┌───────────────────────┴──────────┐
+                          │  Streamlit Web UI (inside Docker)│
+                          │  • Text box → vector query       │
+                          │  • Top‑k similar images grid     │
+                          └──────────────────────────────────┘
+```
+
+### The system consists of several microservices working together:
 
 - **Elasticsearch (es)**: Vector store for storing and searching image embeddings
 - **Downloader**: Downloads images from provided URLs
 - **Embedder**: Generates vector embeddings for images using ML models
 - **Search API**: REST API for querying and retrieving images
 - **Web UI**: User interface for interacting with the image search system
+
+---
 
 ## Prerequisites
 
