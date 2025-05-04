@@ -91,6 +91,7 @@ services:
         test: ["CMD", "curl", "-f", "http://localhost:8000/healthz"]
         interval: 5s
         timeout: 3s
+        start_period: 40s                   # ← give Uvicorn & ES client time
         retries: 5
   
   # ---------- Web UI ------------------------------------------------------
