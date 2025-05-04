@@ -42,4 +42,10 @@ WORKDIR /app
 COPY --from=builder /usr/local/lib/python3.11/site-packages /usr/local/lib/python3.11/site-packages
 COPY --from=builder /app /app
 
-CMD ["python", "-m", "worker"]
+RUN useradd --create-home --shell /usr/sbin/nologin app \
+    && mkdir -p /data/images \
+    && chown -R app:app /app /data
+
+USER app
+
+CMD ["python", "-u", "-m", "worker"]

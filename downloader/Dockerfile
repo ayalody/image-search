@@ -6,4 +6,10 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY downloader/ .
 
-CMD ["python", "downloader.py"]
+RUN useradd --create-home --shell /usr/sbin/nologin app \
+    && mkdir -p /data/images \
+    && chown -R app:app /app /data
+
+USER app
+
+CMD ["python", "-m", "downloader"]
