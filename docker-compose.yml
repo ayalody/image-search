@@ -35,10 +35,7 @@ services:
       dockerfile: downloader/Dockerfile
     depends_on:
       - es
-    environment:
-      - OUTPUT_DIR=/data/images            # where files are written
-      - URL_FILE=/data/image_urls.txt      # mounted URL list
-      - ES_HOST=http://es:9200
+    env_file: .env
     volumes:
       - images:/data/images                # shared volume
       - ./data/image_urls.txt:/data/image_urls.txt:ro
@@ -58,11 +55,7 @@ services:
     depends_on:
       es:
         condition: service_healthy
-    environment:
-      - IMAGES_DIR=/data/images
-      - ES_HOST=http://es:9200
-      - MODEL=RN50         # ViT-L-14 | blip2 | RN50 | etc.
-      - LOG_LEVEL=INFO
+    env_file: .env
     volumes:
       - images:/data/images
     healthcheck:
@@ -78,10 +71,9 @@ services:
       build:
         context: .                          #  ← repo root
         dockerfile: search_api/Dockerfile   #  ← same file you already have
-      environment:
-        ES_HOST: http://es:9200
+      env_file: .env
       ports:
-        - "8000:8000"
+      - "${API_PORT:-8000}:8000"    # host:container
       volumes:
         - images:/data/images:ro
       depends_on:
@@ -101,9 +93,10 @@ services:
       search-api:
         condition: service_healthy
     ports:
-      - "8501:8501"
+      - "${STREAMLIT_SERVER_PORT:-8501}:8501"
+    env_file: .env
     healthcheck:
-      test: ["CMD-SHELL", "curl -fs http://localhost:8501/ || exit 1"]
+      test: ["CMD-SHELL", "curl -fs http://localhost:${STREAMLIT_SERVER_PORT:-8501}/ || exit 1"]
       interval: 30s
       timeout: 5s
       start_period: 15s    # UI starts fast
