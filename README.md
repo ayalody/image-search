@@ -32,83 +32,53 @@ flowchart LR
 
 ---
 
+## 🔧 Prerequisites
+
+| Tool | How to install |
+|------|----------------|
+| **Docker Engine ≥ 24** | • Linux: follow <https://docs.docker.com/engine/install/>.<br>  macOS: ```brew install Docker Desktop```
+| **docker‑compose V2** (CLI plugin) | Install docker-compose: https://docs.docker.com/compose/ <br>  macOS: ```brew install docker-compose``` |
+| **Credential helper** (pull/push without plaintext logins) | Install docker-compose: https://docs.docker.com/compose/ <br>  macOS: ```brew install docker-credential-helper```|
+
+---
+
 ## 🚀 Quick start (local)
 
 ```bash
 # 1. clone & position at repo root
 $ git clone https://github.com/ayalody/image-search.git && cd image-search
 
-# 2. put some image URLs (one per line)
+# 2. create your environment file
+cp .env.example .env               # edit values if you like
+
+# 3. put some image URLs (one per line)
 $ echo "https://picsum.photos/id/237/600/400" >> data/image_urls.txt
 
-# 3. build & launch
+# 4. build & launch
 $ docker compose build --pull
 $ docker compose up --wait -d     # exits when every service is healthy
 
-# 4. open UI
-$ open http://localhost:8501       # or curl the API:  GET :8000/search/text
+# 5. open UI
+$ open "${STREAMLIT_HOST:-http://localhost:8501}"search/text
 ```
 
 When the UI loads, type a phrase and you should see thumbnails in ≤ 1 second.
 
 ---
 
-## ⚙️ Runtime configuration
+## 🔌 Endpoint reference
 
-| Env var (service)           | Default                | What it does                                  |
-| --------------------------- | ---------------------- | --------------------------------------------- |
-| \`\` (downloader)           | `/data/image_urls.txt` | Path to newline‑separated list of image URLs. |
-| \`\` (downloader)           | `/data/images`         | Where JPEGs/PNGs are written.                 |
-| \`\` (downloader)           | `32`                   | Socket limit for parallel downloads.          |
-| \`\` (downloader, embedder) | `30`                   | How often each service re‑scans for new work. |
-| \`\` (embedder)             | `/data/images`         | Directory to walk for picture files.          |
-| \`\` (embedder)             | `RN50`                 | Any OpenCLIP ckpt, e.g. `ViT‑L‑14‑quickgelu`. |
-| \`\` (all services)         | `http://es:9200`       | Elasticsearch URL.                            |
-| \`\` (embedder)             | `INFO`                 | `DEBUG` prints idle heart‑beats.              |
+| URL (default ports) | Method | Served by | Description |
+|---------------------|--------|-----------|-------------|
+| **`{API_HOST:-http://localhost:8000}/docs`** | **GET** | search‑api (FastAPI) | Interactive Swagger / OpenAPI UI. |
+| **`{API_HOST:-http://localhost:8000}/healthz`** | **GET** | search‑api | Returns `{ "status": "ok" }`; used by Docker health‑check. |
+| **`{API_HOST:-http://localhost:8000}/meta`** | **GET** | search‑api | Model name, vector dimension, document count. |
+| **`{API_HOST:-http://localhost:8000}/search/text`** | **POST** (JSON) | search‑api | Text prompt → top‑k images.<br>Body ⇒ `{ "query":"red car", "k":10 }`. |
+| **`{API_HOST:-http://localhost:8000}/search/image`** | **POST** (multipart) | search‑api | Upload image → similar pictures. Optional form field `k`. |
+| **`{API_HOST:-http://localhost:8000}/images/<hash>.jpg`** | **GET** | search‑api | Streams raw image file from read‑only volume (used by UI). |
+| **`${STREAMLIT_HOST:-http://localhost:8501}`** | **GET** | ui (Streamlit) | Front‑end search page. |
+| **`${ES_HOST:-http://localhost:9200}/_cat/indices?v`** | **GET** | es (Elasticsearch) | Cluster/index status via cat API. |
 
-Set these with `-e` flags or a `.env` file.
-
----
-
-## 📈 Scaling strategy (millions of images, high traffic)
-
-| Layer            | How to scale                                                                                                                                                                  |
-| ---------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Downloader**   | Push URLs into SQS/RabbitMQ; autoscale multiple downloader pods; use S3 instead of local volume.                                                                              |
-| **Embedder**     | Horizontal GPU workers behind queue; switch to batch‑embedding & helper.bulk; store vectors in nightly bulk jobs.                                                             |
-| **Vector store** | Elastic Search → 3‑node dedicated cluster• *data* hot tier for vectors• 1 replica for HA• `m=32`, larger heap.  For >50 M images consider OpenSearch K‑NN or Faiss + DiskANN. |
-|                  |                                                                                                                                                                               |
-| **API**          | Gunicorn/Uvicorn with 2× vCPU workers; behind nginx ingress; enable ES HTTP compression; cache last 1 k queries in Redis.                                                     |
-| **UI**           | Stateless—scale via additional Streamlit pods or migrate to React+Next.js for CDN hosting.                                                                                    |
-
-> Total ingestion throughput becomes a function of embed‑GPU count; query throughput scales independently by adding API pods.
+> **Tip:** Host ports are configurable in `.env` (`API_PORT`, `STREAMLIT_PORT`) or by editing the `ports:` mappings in `docker‑compose.yml`.
 
 ---
-
-## 🧪 Development tips
-
-```bash
-# follow logs of one service
-$ docker compose logs -f embedder
-
-# run unit tests & lint (requires python 3.11 locally)
-$ hatch run all        # or  tox -e py311
-
-# wipe everything
-$ docker compose down -v && docker builder prune -af
-```
-
----
-
-## 📝 Contributing
-
-1. Fork / feature‑branch.
-2. Pre‑commit hooks (`ruff`, `black`, `isort`).
-3. `docker compose build --pull --no-cache` must stay green.
-4. Submit PR; CI runs cold‑boot health check and `pip check`.
-
-PRs for new models or Faiss back‑end are welcome!
-
----
-
-© 2025 Image Search Project — MIT licensed.
