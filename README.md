@@ -1,123 +1,83 @@
-# Image Search System
+# 🖼️ Image‑Search Project
 
-A distributed system for searching and retrieving images using vector embeddings and semantic search capabilities.
-
-## System Architecture
-
-```text
-┌────────────┐      ┌─────────────┐      ┌────────────────┐
-│  Image     │      │  Feature    │      │ Elasticsearch  │
-│  Folder    │ ───▶ │  Extractor  │ ───▶ │  (Vector &     │
-│ (*.jpg)    │      │  (CLIP)     │      │   Metadata)    │
-└────────────┘      └─────────────┘      └────────┬───────┘
-                                                  │
-                          ┌───────────────────────┴──────────┐
-                          │  Streamlit Web UI (inside Docker)│
-                          │  • Text box → vector query       │
-                          │  • Top‑k similar images grid     │
-                          └──────────────────────────────────┘
-```
-
-### The system consists of several microservices working together:
-
-- **Elasticsearch (es)**: Vector store for storing and searching image embeddings
-- **Downloader**: Downloads images from provided URLs
-- **Embedder**: Generates vector embeddings for images using ML models
-- **Search API**: REST API for querying and retrieving images
-- **Web UI**: User interface for interacting with the image search system
+A fully Docker‑orchestrated demo that turns any list of image URLs into a local **vector‑search engine**.  It downloads pictures, embeds them with OpenCLIP, stores vectors in Elasticsearch 8, and serves a FastAPI + Streamlit front‑end so you can type a prompt such as *“red car at night”* and instantly see relevant images.
 
 ---
 
-## Prerequisites
+## 📊 Architecture at a glance
 
-- Docker and Docker Compose
-- Sufficient disk space for image storage (managed by Docker volumes)
-- A list of image URLs in `data/image_urls.txt`
+```mermaid
+flowchart LR
+    subgraph Data
+        A["urls.txt"] -- "bind‑mount" --> D
+    end
 
-## Getting Started
+    subgraph Containers
+        D(["Downloader<br/>(asyncio)"]) --> I[["/images volume/"]]
+        E(["Embedder<br/>(OpenCLIP → vector)"]) -->|"_bulk docs_"| ES[("es<br/>(Elasticsearch 8<br/>HNSW index)")]
+        I --> E
+        I -. "read‑only" .-> API(["Search‑api<br/>(FastAPI)"])
+        API <==>|"search"| ES
+        UI(["UI<br/>(Streamlit)"]) -->|"REST /search"| API
+    end
 
-1. Clone the repository
-2. Create a `data` directory and add your `image_urls.txt` file
-3. Start the services:
-   ```bash
-   docker-compose up -d
-   ```
-
-The system will:
-- Start Elasticsearch for vector storage
-- Download images from the provided URLs (stored in Docker volumes)
-- Generate embeddings for the images
-- Make the search API available at `http://localhost:8000`
-- Serve the web UI at `http://localhost:8501`
-
-## Data Storage
-
-The system uses Docker volumes for data persistence:
-
-- `images`: Stores downloaded images (shared between downloader and embedder)
-- `es-data`: Stores Elasticsearch data and indices
-
-Images are stored in Docker volumes and are not written to the host machine. This provides better isolation and performance.
-
-## Components
-
-### Elasticsearch (es)
-- Runs on port 9200
-- Stores image embeddings and metadata
-- Provides vector search capabilities
-- Data persisted in `es-data` volume
-
-### Downloader
-- Downloads images from URLs in `image_urls.txt`
-- Stores images in shared `images` volume
-- Updates Elasticsearch with image metadata
-
-### Embedder
-- Generates vector embeddings for images
-- Supports multiple embedding models (e.g., OpenCLIP, BLIP2)
-- Updates Elasticsearch with image embeddings
-- Reads images from shared `images` volume
-
-### Search API
-- REST API available at `http://localhost:8000`
-- Provides endpoints for:
-  - Image search
-  - Health checks
-  - System status
-- Accesses images through Docker volumes
-
-### Web UI
-- Streamlit-based interface
-- Accessible at `http://localhost:8501`
-- Provides visual interface for image search
-
-## Configuration
-
-- Adjust Elasticsearch heap size in `docker-compose.yml` if needed
-- Configure embedding model in embedder service
-- Modify ports if they conflict with existing services
-
-## Monitoring
-
-- Elasticsearch health: `http://localhost:9200/_cluster/health`
-- Search API health: `http://localhost:8000/healthz`
-- Web UI: `http://localhost:8501`
-
-## Troubleshooting
-
-If services fail to start:
-1. Check Docker volume space availability
-2. Verify `image_urls.txt` format
-3. Check Elasticsearch health
-4. Review container logs using `docker-compose logs <service_name>`
-
-## Data Management
-
-To clean up data:
-```bash
-# Remove all containers and volumes
-docker-compose down -v
-
-# Remove specific volumes
-docker volume rm image-search_images image-search_es-data
+    classDef c fill:#f6f8fa,stroke:#999,color:#000;
+    class D,E,ES,API,UI,I c;
 ```
+
+*Shared state*
+
+* **images volume** – raw `*.jpg/.png` files (Downloader ⇄ Embedder ⇄ UI)
+* **es‑data volume** – persisted Lucene shards
+
+---
+
+## 🔧 Prerequisites
+
+| Tool | How to install |
+|------|----------------|
+| **Docker Engine ≥ 24** | • Linux: follow <https://docs.docker.com/engine/install/>.<br>  macOS: ```brew install Docker Desktop```
+| **docker‑compose V2** (CLI plugin) | Install docker-compose: https://docs.docker.com/compose/ <br>  macOS: ```brew install docker-compose``` |
+| **Credential helper** (pull/push without plaintext logins) | Install docker-compose: https://docs.docker.com/compose/ <br>  macOS: ```brew install docker-credential-helper```|
+
+---
+
+## 🚀 Quick start (local)
+
+```bash
+# 1. clone & position at repo root
+$ git clone https://github.com/ayalody/image-search.git && cd image-search
+
+# 2. create your environment file
+cp .env.example .env               # edit values if you like
+
+# 3. put some image URLs (one per line)
+$ echo "https://picsum.photos/id/237/600/400" >> data/image_urls.txt
+
+# 4. build & launch
+$ docker compose build --pull
+$ docker compose up --wait -d     # exits when every service is healthy
+
+# 5. open UI
+$ open "${STREAMLIT_HOST:-http://localhost:8501}"search/text
+```
+
+When the UI loads, type a phrase and you should see thumbnails in ≤ 1 second.
+
+---
+
+## 🔌 Endpoint reference
+
+| URL (default ports) | Method | Served by | Description |
+|---------------------|--------|-----------|-------------|
+| http://localhost:8000/docs | **GET** | search‑api (FastAPI) | Interactive Swagger / OpenAPI UI. |
+| http://localhost:8000/healthz | **GET** | search‑api | Returns `{ "status": "ok" }`; used by Docker health‑check. |
+| http://localhost:8000/meta | **GET** | search‑api | Model name, vector dimension, document count. |
+| http://localhost:8000/search/text | **POST** (JSON) | search‑api | Text prompt → top‑k images.<br>Body ⇒ `{ "query":"red car", "k":10 }`. |
+| http://localhost:8000/search/image | **POST** (multipart) | search‑api | Upload image → similar pictures. Optional form field `k`. |
+| http://localhost:8501 | **GET** | ui (Streamlit) | Front‑end search page. |
+| http://localhost:9200/_cat/indices?v | **GET** | es (Elasticsearch) | Cluster/index status via cat API. |
+
+> **Tip:** Host ports are configurable in `.env` (`API_PORT`, `STREAMLIT_PORT`) or by editing the `ports:` mappings in `docker‑compose.yml`.
+
+---

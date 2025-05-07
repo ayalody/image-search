@@ -23,7 +23,7 @@ services:
     volumes:
       - es-data:/usr/share/elasticsearch/data
     healthcheck:
-      test: ["CMD-SHELL", "curl -fs http://localhost:9200/_cluster/health || exit 1"]
+      test: ["CMD-SHELL", "curl -fs ${ES_HOST:-http://localhost:9200}/_cluster/health || exit 1"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -35,10 +35,7 @@ services:
       dockerfile: downloader/Dockerfile
     depends_on:
       - es
-    environment:
-      - OUTPUT_DIR=/data/images            # where files are written
-      - URL_FILE=/data/image_urls.txt      # mounted URL list
-      - ES_HOST=http://es:9200
+    env_file: .env
     volumes:
       - images:/data/images                # shared volume
       - ./data/image_urls.txt:/data/image_urls.txt:ro
@@ -58,11 +55,7 @@ services:
     depends_on:
       es:
         condition: service_healthy
-    environment:
-      - IMAGES_DIR=/data/images
-      - ES_HOST=http://es:9200
-      - MODEL=RN50         # ViT-L-14 | blip2 | RN50 | etc.
-      - LOG_LEVEL=INFO
+    env_file: .env
     volumes:
       - images:/data/images
     healthcheck:
@@ -78,17 +71,16 @@ services:
       build:
         context: .                          #  ← repo root
         dockerfile: search_api/Dockerfile   #  ← same file you already have
-      environment:
-        ES_HOST: http://es:9200
+      env_file: .env
       ports:
-        - "8000:8000"
+      - "${API_PORT:-8000}:8000"    # host:container
       volumes:
         - images:/data/images:ro
       depends_on:
         es:
           condition: service_healthy
       healthcheck:
-        test: ["CMD", "curl", "-f", "http://localhost:8000/healthz"]
+        test: ["CMD-SHELL", "curl -f ${API_HOST:-http://localhost:8000}/healthz || exit 1"]
         interval: 5s
         timeout: 3s
         start_period: 40s                   # ← give Uvicorn & ES client time
@@ -101,9 +93,10 @@ services:
       search-api:
         condition: service_healthy
     ports:
-      - "8501:8501"
+      - "${STREAMLIT_PORT:-8501}:8501"
+    env_file: .env
     healthcheck:
-      test: ["CMD-SHELL", "curl -fs http://localhost:8501/ || exit 1"]
+      test: ["CMD-SHELL", "curl -fs ${STREAMLIT_HOST:-http://localhost:8501}/ || exit 1"]
       interval: 30s
       timeout: 5s
       start_period: 15s    # UI starts fast
