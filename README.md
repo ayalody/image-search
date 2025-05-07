@@ -74,8 +74,8 @@ When the UI loads, type a phrase and you should see thumbnails in ≤ 1 second
 | http://localhost:8000/healthz | **GET** | search‑api | Returns `{ "status": "ok" }`; used by Docker health‑check. |
 | http://localhost:8000/meta | **GET** | search‑api | Model name, vector dimension, document count. |
 | http://localhost:8000/search/text | **POST** (JSON) | search‑api | Text prompt → top‑k images.<br>Body ⇒ `{ "query":"red car", "k":10 }`. |
-| http://localhost:8000/search/image` | **POST** (multipart) | search‑api | Upload image → similar pictures. Optional form field `k`. |
-| http://localhost:8501` | **GET** | ui (Streamlit) | Front‑end search page. |
+| http://localhost:8000/search/image | **POST** (multipart) | search‑api | Upload image → similar pictures. Optional form field `k`. |
+| http://localhost:8501 | **GET** | ui (Streamlit) | Front‑end search page. |
 | http://localhost:9200/_cat/indices?v | **GET** | es (Elasticsearch) | Cluster/index status via cat API. |
 
 > **Tip:** Host ports are configurable in `.env` (`API_PORT`, `STREAMLIT_PORT`) or by editing the `ports:` mappings in `docker‑compose.yml`.
