@@ -3,7 +3,7 @@ __pycache__
 *.pyo
 *.pyd
 .env
-data/
+# data/
 *.png
 *.jpg
 *.jpeg
