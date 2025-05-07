@@ -37,8 +37,8 @@ services:
       - es
     env_file: .env
     volumes:
-      - images:/data/images          # shared volume for pictures
-      - ./data:/data:ro              # ← mount the whole data folder read‑only
+      - images:/data/images                # shared volume
+      - ./data/image_urls.txt:/data/image_urls.txt:ro
     healthcheck:
       # exit 0 if PID 1 (main loop) is alive
       test: ["CMD-SHELL", "test -e /proc/1"]
@@ -80,7 +80,7 @@ services:
         es:
           condition: service_healthy
       healthcheck:
-        test: ["CMD", "curl", "-f", "{API_HOST:-http://localhost:8000}/healthz"]
+        test: ["CMD-SHELL", "curl -f ${API_HOST:-http://localhost:8000}/healthz || exit 1"]
         interval: 5s
         timeout: 3s
         start_period: 40s                   # ← give Uvicorn & ES client time
